@@ -1,0 +1,1244 @@
+#include <sfml.h>
+#include <iostream>
+#include <vector>
+#include <time.h>
+#include <functional>
+
+int grid[200];
+
+using namespace std;
+
+void updatescoretext(int *score, int increment, sf::Text *scoretext) {
+	*score=*score+increment;
+	string scorestring=to_string(*score);
+	(*scoretext).setString(scorestring);
+}
+
+class Block : public sf::Drawable , public sf::Transformable
+{
+public:
+	sf::VertexArray dasquad;
+	Block (void);
+	int gridcell () {return ((int)((getPosition().x-100)/20 + 10*(getPosition().y-100)/20));}
+	void set_color(int,int,int);
+    int restingplace;
+	int destroy;
+	int type;
+private:
+    virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const
+    {
+        // Apply the entity's transform - combine it with the one that was passed by the caller.
+        states.transform *= getTransform(); // getTransform() is defined by sf::Transformable
+        // Draw the vertex array.
+		target.draw(dasquad, states);
+    }
+};
+
+Block::Block (void) {
+	int i;
+	dasquad = sf::VertexArray(sf::Quads,4);
+	dasquad[0].position = sf::Vector2f(0,0);
+	dasquad[1].position = sf::Vector2f(20,0);
+    dasquad[2].position = sf::Vector2f(20,20);
+    dasquad[3].position = sf::Vector2f(0,20);
+	for (i=0; i<4; i++) {
+		dasquad[i].color = sf::Color::Blue;
+	}
+	restingplace=201; // Where it ends up.
+	destroy=0; // Whether it's set to be destroyed.
+	type=0; // Type of piece it is.
+}
+
+void Block::set_color (int r, int g, int b) {
+	int i;
+	for (i=0; i<4; i++) {
+		dasquad[i].color = sf::Color(r,g,b);
+	}
+}
+
+class Frame : public sf::Drawable , public sf::Transformable
+{
+public:
+	sf::VertexArray triangles;
+    Frame (void);
+private:
+    virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const
+    {
+        // Apply the entity's transform  combine it with the one that was passed by the caller.
+        states.transform *= getTransform(); // getTransform() is defined by sf::Transformable    
+        // Draw the vertex array.
+		target.draw(triangles, states);
+    }
+};
+
+Frame::Frame (void) {
+	triangles = sf::VertexArray(sf::TrianglesStrip,10);
+	triangles[0].position = sf::Vector2f(95, 100);
+	triangles[1].position = sf::Vector2f(95, 505);
+	triangles[2].position = sf::Vector2f(100, 100);
+	triangles[3].position = sf::Vector2f(100, 505);
+	triangles[4].position = sf::Vector2f(100, 500);
+	triangles[5].position = sf::Vector2f(305, 505);
+	triangles[6].position = sf::Vector2f(305, 500);
+	triangles[7].position = sf::Vector2f(305, 100);
+	triangles[8].position = sf::Vector2f(300, 500);
+	triangles[9].position = sf::Vector2f(300, 100);
+}
+
+class Everything : public sf::Drawable , public sf::Transformable
+{
+public:
+	Frame leftframe;
+	sf::Font font;
+	sf::Text wordscore;
+	Everything (void);
+private:
+    virtual void draw(sf::RenderTarget& target, sf::RenderStates states) const
+    {
+        // Draw the vertex array.
+		target.draw(leftframe, states);
+        target.draw(wordscore, states);
+    }
+};
+
+Everything::Everything (void) {
+	if (!font.loadFromFile("arial.ttf"))
+	{
+		cout << "\nAlas and woe! The font didn't load!";
+		exit(-1);
+	}
+	wordscore.setFont(font);
+	wordscore.setCharacterSize(25);
+	wordscore.setString("Score:");
+	wordscore.setColor(sf::Color(255, 255, 255));
+	wordscore.setPosition(120,10);
+}
+
+// this function is started when thread.launch() is called
+void func(vector<Block>* blockvector, int* block_no, int* gameover, int* score, sf::Text* scoretext)
+{
+	int i, j, k, l, gridsum, linescomplete, stuck;
+	int rand_no, r, g, b;
+	srand(time(NULL));  
+	sf::Clock clock; // starts the clock
+	while (*gameover == 0) {
+		j=1; // Position block has reached. 1 is top, 20 is bottom/wherever it comes to rest. 
+		stuck=0;
+		// Generate a random block.
+		// Choose a random color.
+		rand_no=rand()%7;
+		switch(rand_no) {
+		case 0:
+			r=255; g=0; b=0;
+			break;
+		case 1:
+			r=0; g=255; b=0;
+			break;
+		case 2:
+			r=0; g=0; b=255;
+			break;
+		case 3:
+			r=255; g=255; b=0;
+			break;
+		case 4:
+			r=255; g=0; b=255;
+			break;
+		case 5:
+			r=0; g=255; b=255;
+			break;
+		default:
+			r=255; g=255; b=255;
+			break;
+		}
+		*block_no=*block_no-1;
+		for (i=0; i<4; i++) {
+			*block_no=*block_no+1;
+			(*blockvector)[*block_no].set_color(r,g,b);
+			(*blockvector)[*block_no].type=rand_no;
+		}
+		// Position new blocks according to which shape it is.
+		switch(rand_no) {
+			case 0:
+				(*blockvector)[*block_no-3].setPosition(180,100);
+				(*blockvector)[*block_no-2].setPosition(200,100);
+				(*blockvector)[*block_no-1].setPosition(180,120);
+				(*blockvector)[*block_no].setPosition(200,120);
+				break;
+			case 1:
+				(*blockvector)[*block_no-3].setPosition(160,100);
+				(*blockvector)[*block_no-2].setPosition(180,100);
+				(*blockvector)[*block_no-1].setPosition(200,100);
+				(*blockvector)[*block_no].setPosition(220,100);
+				break;
+			case 2:
+				(*blockvector)[*block_no-3].setPosition(160,100);
+				(*blockvector)[*block_no-2].setPosition(180,100);
+				(*blockvector)[*block_no-1].setPosition(200,100);
+				(*blockvector)[*block_no].setPosition(180,120);
+				break;
+			case 3:
+				(*blockvector)[*block_no-3].setPosition(180,100);
+				(*blockvector)[*block_no-2].setPosition(200,100);
+				(*blockvector)[*block_no-1].setPosition(160,120);
+				(*blockvector)[*block_no].setPosition(180,120);
+				break;
+			case 4:
+				(*blockvector)[*block_no-3].setPosition(160,100);
+				(*blockvector)[*block_no-2].setPosition(180,100);
+				(*blockvector)[*block_no-1].setPosition(200,120);
+				(*blockvector)[*block_no].setPosition(180,120);
+				break;
+			case 5:
+				(*blockvector)[*block_no-3].setPosition(160,100);
+				(*blockvector)[*block_no-2].setPosition(180,100);
+				(*blockvector)[*block_no-1].setPosition(200,100);
+				(*blockvector)[*block_no].setPosition(160,120);
+				break;
+			default:
+				(*blockvector)[*block_no-3].setPosition(160,100);
+				(*blockvector)[*block_no-2].setPosition(180,100);
+				(*blockvector)[*block_no-1].setPosition(200,100);
+				(*blockvector)[*block_no].setPosition(200,120);
+				break;
+		}
+		clock.restart();
+		sf::Time elapsed1 = clock.getElapsedTime();
+		while (j<20) {
+			while (elapsed1.asSeconds() < j) {
+				elapsed1 = clock.getElapsedTime();
+			}
+			// If there's nothing in the cell below and it's not reached the bottom, drop block and increase j.
+			if (grid[(*blockvector)[*block_no-3].gridcell()+10] == 0 && grid[(*blockvector)[*block_no-2].gridcell()+10] == 0 && grid[(*blockvector)[*block_no-1].gridcell()+10] == 0 && grid[(*blockvector)[*block_no].gridcell()+10] == 0 && (*blockvector)[*block_no-3].gridcell() < 190 && (*blockvector)[*block_no-2].gridcell() < 190 && (*blockvector)[*block_no-1].gridcell() < 190 && (*blockvector)[*block_no].gridcell() < 190) {
+				(*blockvector)[*block_no].move(0,20); (*blockvector)[*block_no-1].move(0,20); (*blockvector)[*block_no-2].move(0,20); (*blockvector)[*block_no-3].move(0,20); j++;
+			} else { // Otherwise set j to 20.
+				j=20; 
+				updatescoretext(score,1,scoretext);
+			}
+		}
+		// When block is at rest, set its resting place.
+		(*blockvector)[*block_no].restingplace=(*blockvector)[*block_no].gridcell();
+		(*blockvector)[*block_no-1].restingplace=(*blockvector)[*block_no-1].gridcell();
+		(*blockvector)[*block_no-2].restingplace=(*blockvector)[*block_no-2].gridcell();
+		(*blockvector)[*block_no-3].restingplace=(*blockvector)[*block_no-3].gridcell();
+		// Update grid accordingly.
+		grid[(*blockvector)[*block_no].restingplace]=1;		
+		grid[(*blockvector)[*block_no-1].restingplace]=1;		
+		grid[(*blockvector)[*block_no-2].restingplace]=1;		
+		grid[(*blockvector)[*block_no-3].restingplace]=1;		
+		// Check whether game over and update accordingly.
+		for (i=0; i<10; i++) {
+			if (grid[i]==1) {*gameover=1;}
+		}
+		// Go through all lines, if any is complete, delete it and shift.
+		linescomplete=0;
+		for (l=0; l<20; l++) {
+			gridsum=0; 
+			for (i=l*10; i<(l+1)*10; i++) {
+				gridsum=gridsum+grid[i];
+			}
+		if (gridsum == 10) {
+			linescomplete++;
+			// Perform major block shift.
+			// If block in appropriate line, mark it as destroy.
+			for (i=0; i<*block_no+1; i++) {
+				if ((*blockvector)[i].gridcell() > l*10-1 && (*blockvector)[i].gridcell() < (l+1)*10) {
+					(*blockvector)[i].destroy = 1;
+				}
+			}
+			// Go through all blocks, shunt back if a destroy is reached.
+			i=0; j=*block_no+1;
+			while (i<j) {
+				while ((*blockvector)[i].destroy == 1 && i<j) {
+					for (k=i+1; k<j; k++) {
+						(*blockvector)[k-1]=(*blockvector)[k];
+					}
+					j--;
+				}	
+				i++;
+			}
+			// Delete destroys.
+			for (i=0; i<*block_no+1; i++) {
+				(*blockvector)[i].destroy=0;
+			}
+			// Clear grid as everything's about to move.
+			for (i=0; i<200; i++) {
+				grid[i]=0;
+			}
+			*block_no=*block_no-10;
+			// Send all empty blocks back to where they come from.
+			for (i=*block_no+1; i<*block_no+11; i++) {
+				(*blockvector)[i].setPosition(200,100);
+			}
+			// Make everything above fall.
+			for (i=0; i<*block_no+1; i++) {
+				if ((*blockvector)[i].restingplace < l*10) {
+					(*blockvector)[i].move(0,20);
+					(*blockvector)[i].restingplace=(*blockvector)[i].gridcell();
+				}
+			}
+			// Update grid.
+			for (i=0; i<*block_no+1; i++) {
+				grid[(*blockvector)[i].restingplace]=1;
+			}
+		}
+		}
+		if (linescomplete == 1) {updatescoretext(score,10,scoretext);}
+		if (linescomplete == 2) {updatescoretext(score,30,scoretext);}
+		if (linescomplete == 3) {updatescoretext(score,60,scoretext);}
+		if (linescomplete == 4) {updatescoretext(score,100,scoretext);}
+		// If game not over, update block_no.
+		if (*gameover == 0) {
+			*block_no=*block_no+1;
+			// Make blockvector bigger if getting close to capacity.
+			if (*block_no >= (int)(*blockvector).size()-20) {
+				(*blockvector).resize((*blockvector).size()+20);
+			}
+		}
+	}
+}
+
+int main() { 
+	int i;
+	int pos=0; // What position piece is in.
+	int movement=0; // Type of movement to perform.
+	int block_no=0; // One of the four block we're currently placing.
+	int gameover=-1;
+	int score=0;
+	vector<Block> blockvector(200); // All the blocks in play.
+	sf::Font font;
+	if (!font.loadFromFile("arial.ttf"))
+	{
+		cout << "\nAlas and woe! The font didn't load!";
+		exit(-1);
+	}
+	sf::Text scoretext;
+	string scorestring=to_string(score);
+	scoretext.setCharacterSize(25);
+	scoretext.setFont(font);
+	scoretext.setString(scorestring);
+	scoretext.setColor(sf::Color(255, 255, 255));
+	scoretext.setPosition(200,10);
+
+	sf::Text introtext;
+	introtext.setFont(font);
+	introtext.setString("Z - left\nX - right\nF - rotate\nT - drop\n\nPress space to begin.");
+	introtext.setCharacterSize(25);
+	introtext.setColor(sf::Color(0, 255, 255));
+	introtext.setPosition(64,210);
+	introtext.setStyle(sf::Text::Bold);
+
+	sf::Text gameovertext;
+	gameovertext.setFont(font);
+	gameovertext.setString("  Game over! So sad!\nPress space to replay. ");
+	gameovertext.setCharacterSize(25);
+	gameovertext.setColor(sf::Color(0, 255, 255));
+	gameovertext.setPosition(64,270);
+	gameovertext.setStyle(sf::Text::Bold);
+	sf::RectangleShape gameoverrect(sf::Vector2f(285, 100));
+	gameoverrect.setFillColor(sf::Color(0, 0, 0));
+	gameoverrect.setOutlineThickness(5);
+	gameoverrect.setOutlineColor(sf::Color(0, 255, 255));
+	gameoverrect.setPosition(57,255);
+	for (i=0; i<200; i++) {
+		grid[i]=0;
+	}
+	Everything stuff;
+	sf::RenderWindow window(sf::VideoMode(400, 600), "Zedtris");
+	 // create a thread with func() as entry point
+    sf::Thread thread(std::bind(&func, &blockvector, &block_no, &gameover, &score, &scoretext));
+    // run it - start block falling.
+    thread.launch();
+	window.setKeyRepeatEnabled(true);
+	while (window.isOpen())
+    {      
+		sf::Event event;
+        while (window.pollEvent(event))
+        {
+            if (event.type == sf::Event::Closed)
+                window.close();
+			if (event.type == sf::Event::KeyPressed) {
+				// Move left.
+				if (event.key.code == sf::Keyboard::Z) {
+					// If no block is right on the left.
+					if (blockvector[block_no].gridcell()%10 != 0 && blockvector[block_no-1].gridcell()%10 != 0 && blockvector[block_no-2].gridcell()%10 != 0 && blockvector[block_no-3].gridcell()%10 != 0) {
+						// If there's nothing resting left of any blocks, move all.
+						if (grid[(blockvector)[block_no].gridcell()-1] == 0 && grid[(blockvector)[block_no-1].gridcell()-1] == 0 && grid[(blockvector)[block_no-2].gridcell()-1] == 0 && grid[(blockvector)[block_no-3].gridcell()-1] == 0) {
+							blockvector[block_no-3].move(-20,0);
+							blockvector[block_no-2].move(-20,0);
+							blockvector[block_no-1].move(-20,0);
+							blockvector[block_no].move(-20,0);
+						}
+					}
+				}
+				// Move right.
+				if (event.key.code == sf::Keyboard::X) {
+					// If no block is right on the right.
+					if (blockvector[block_no].gridcell()%10 != 9 && blockvector[block_no-1].gridcell()%10 != 9 && blockvector[block_no-2].gridcell()%10 != 9 && blockvector[block_no-3].gridcell()%10 != 9) {
+						// If there's nothing resting right of any blocks, move all.
+						if (grid[(blockvector)[block_no].gridcell()+1] == 0 && grid[(blockvector)[block_no-1].gridcell()+1] == 0 && grid[(blockvector)[block_no-2].gridcell()+1] == 0 && grid[(blockvector)[block_no-3].gridcell()+1] == 0) {
+							blockvector[block_no].move(20,0);
+							blockvector[block_no-1].move(20,0);
+							blockvector[block_no-2].move(20,0);
+							blockvector[block_no-3].move(20,0);
+						}
+					}
+				}
+				// Turn piece.
+				if (event.key.code == sf::Keyboard::F) {
+					// Depends what type of piece it is.
+					switch (blockvector[block_no].type) {
+						case 0: // Square.
+							break;
+						case 1: // Long piece.
+							if (blockvector[block_no].gridcell() == blockvector[block_no-1].gridcell()+1) {
+								pos=0;
+							} else {
+								pos=1;
+							}
+							switch(pos) {
+								case 0: // If horizontal.
+									// If at the top of screen.
+									if (blockvector[block_no].gridcell() < 10) {
+										// If there's nothing surrounding movement 0.
+										if (grid[blockvector[block_no-2].gridcell()+10] == 0 && grid[blockvector[block_no-2].gridcell()+20] == 0 && grid[blockvector[block_no-2].gridcell()+30] == 0) {
+											movement = 0;
+										} else { // Don't turn.
+											movement = 4;
+										}
+									}
+									// If in second row of screen.
+									if (blockvector[block_no].gridcell() > 9 && blockvector[block_no].gridcell() < 20) {
+										// If there's nothing surrounding, move normally.
+										if (grid[blockvector[block_no-2].gridcell()-10] == 0 && grid[blockvector[block_no-2].gridcell()+10] == 0 && grid[blockvector[block_no-2].gridcell()+20] == 0) {									
+											movement = 1;
+										} else if (grid[blockvector[block_no-2].gridcell()+10] == 0 && grid[blockvector[block_no-2].gridcell()+20] == 0 && grid[blockvector[block_no-2].gridcell()+30] == 0) {
+											// If there's something above but it's all clear below, movement 0.
+											movement = 0;
+										} else { // Don't turn.
+											movement = 4;
+										}
+									}
+									// If in third row of screen.
+									if (blockvector[block_no].gridcell() > 19 && blockvector[block_no].gridcell() < 30) {
+									// If there's nothing surrounding, move normally.
+										if (grid[blockvector[block_no-2].gridcell()-10] == 0 && grid[blockvector[block_no-2].gridcell()+10] == 0 && grid[blockvector[block_no-2].gridcell()+20] == 0) {									
+											movement = 1;
+										} else if (grid[blockvector[block_no-2].gridcell()+10] == 0 && grid[blockvector[block_no-2].gridcell()+20] == 0 && grid[blockvector[block_no-2].gridcell()+30] == 0) {
+											// If there's something above but it's all clear below, movement 0.
+											movement = 0;
+										} else if (grid[blockvector[block_no-2].gridcell()-20] == 0 && grid[blockvector[block_no-2].gridcell()-10] == 0 && grid[blockvector[block_no-2].gridcell()+10] == 0) {
+											movement = 2; // Something two below but two free above.
+										} else { // Don't turn.
+											movement = 4;
+										}
+									}
+									// If in middle.
+									if (blockvector[block_no].gridcell() > 29 && blockvector[block_no].gridcell() < 170) {
+									// If there's nothing surrounding, move normally.
+									if (grid[blockvector[block_no-2].gridcell()-10] == 0 && grid[blockvector[block_no-2].gridcell()+10] == 0 && grid[blockvector[block_no-2].gridcell()+20] == 0) {									
+										movement = 1;
+									} else if (grid[blockvector[block_no-2].gridcell()+10] == 0 && grid[blockvector[block_no-2].gridcell()+20] == 0 && grid[blockvector[block_no-2].gridcell()+30] == 0) {
+										// If there's something above but it's all clear below, movement 0.
+										movement = 0;
+									} else if (grid[blockvector[block_no-2].gridcell()-20] == 0 && grid[blockvector[block_no-2].gridcell()-10] == 0 && grid[blockvector[block_no-2].gridcell()+10] == 0) {
+										movement = 2; // Something two below but two free above.
+									} else if (grid[blockvector[block_no-2].gridcell()-30] == 0 && grid[blockvector[block_no-2].gridcell()-20] == 0 && grid[blockvector[block_no-2].gridcell()+10] == -10) {
+										movement = 3; // Three above free.
+									} else { // Don't turn.
+										movement = 4;
+									}
+									}
+									// Three from bottom.
+									if (blockvector[block_no].gridcell() > 169 && blockvector[block_no].gridcell() < 180) {
+									// If there's nothing surrounding, move normally.
+									if (grid[blockvector[block_no-2].gridcell()-10] == 0 && grid[blockvector[block_no-2].gridcell()+10] == 0 && grid[blockvector[block_no-2].gridcell()+20] == 0) {									
+										movement = 1;
+									} else if (grid[blockvector[block_no-2].gridcell()-20] == 0 && grid[blockvector[block_no-2].gridcell()-10] == 0 && grid[blockvector[block_no-2].gridcell()+10] == 0) {
+										movement = 2; // Something two below but two free above.
+									} else if (grid[blockvector[block_no-2].gridcell()-30] == 0 && grid[blockvector[block_no-2].gridcell()-20] == 0 && grid[blockvector[block_no-2].gridcell()+10] == -10) {
+										movement = 3; // Three above free.
+									} else { // Don't turn.
+										movement = 4;
+									}
+									}
+									// Two from bottom.
+									if (blockvector[block_no].gridcell() > 179 && blockvector[block_no].gridcell() < 190) {
+										// If there's nothing surrounding, move normally.
+										if (grid[blockvector[block_no-2].gridcell()-20] == 0 && grid[blockvector[block_no-2].gridcell()-10] == 0 && grid[blockvector[block_no-2].gridcell()+10] == 0) {
+											movement = 2; // Something two below but two free above.
+										} else if (grid[blockvector[block_no-2].gridcell()-30] == 0 && grid[blockvector[block_no-2].gridcell()-20] == 0 && grid[blockvector[block_no-2].gridcell()+10] == -10) {
+											movement = 3; // Three above free.
+										} else { // Don't turn.
+										movement = 4;
+										}	
+									}
+									// Bottom row.
+									if (blockvector[block_no].gridcell() > 189) {
+										if (grid[blockvector[block_no-2].gridcell()-30] == 0 && grid[blockvector[block_no-2].gridcell()-20] == 0 && grid[blockvector[block_no-2].gridcell()+10] == -10) {
+											movement = 3; // Three above free.
+										} else { // Don't turn.
+											movement = 4;
+										}
+									}
+									switch(movement) {
+										case 0:
+											blockvector[block_no-3].move(20,0);
+											blockvector[block_no-2].move(0,20);
+											blockvector[block_no-1].move(-20,40);
+											blockvector[block_no].move(-40,60);
+											break;
+										case 1:
+											blockvector[block_no-3].move(20,-20);
+											blockvector[block_no-1].move(-20,20);
+											blockvector[block_no].move(-40,40);
+											break;
+										case 2:
+											blockvector[block_no-3].move(20,-40);
+											blockvector[block_no-2].move(0,-20);
+											blockvector[block_no-1].move(-20,0);
+											blockvector[block_no].move(-40,20);
+											break;
+										case 3:
+											blockvector[block_no-3].move(20,-60);
+											blockvector[block_no-2].move(0,-40);
+											blockvector[block_no-1].move(-20,-20);
+											blockvector[block_no].move(-40,0);
+											break;
+										default:
+											break;
+									}
+									break;
+								default: // If vertical.
+									// On far left.
+									if (blockvector[block_no-3].gridcell()%10 == 0) {
+										if (grid[blockvector[block_no-2].gridcell()+1] == 0 && grid[blockvector[block_no-2].gridcell()+2] == 0 && grid[blockvector[block_no-2].gridcell()+3] == 0) {
+											movement=0;
+										} else {
+											movement=4;
+										}
+									}
+									// 1 from left.
+									if (blockvector[block_no-3].gridcell()%10 == 1) {
+										if (grid[blockvector[block_no-2].gridcell()-1] == 0 && grid[blockvector[block_no-2].gridcell()+1] == 0 && grid[blockvector[block_no-2].gridcell()+2] == 0) {
+											movement=1;
+										} else if (grid[blockvector[block_no-2].gridcell()+1] == 0 && grid[blockvector[block_no-2].gridcell()+2] == 0 && grid[blockvector[block_no-2].gridcell()+3] == 0) {
+											movement=0;
+										} else {
+											movement=4;
+										}
+									}
+									// 2 from left.
+									if (blockvector[block_no-3].gridcell()%10 == 2) {
+										if (grid[blockvector[block_no-2].gridcell()-1] == 0 && grid[blockvector[block_no-2].gridcell()+1] == 0 && grid[blockvector[block_no-2].gridcell()+2] == 0) {
+											movement=1;
+										} else if (grid[blockvector[block_no-2].gridcell()+1] == 0 && grid[blockvector[block_no-2].gridcell()+2] == 0 && grid[blockvector[block_no-2].gridcell()+3] == 0) {
+											movement=0;
+										} else if (grid[blockvector[block_no-2].gridcell()-2] == 0 && grid[blockvector[block_no-2].gridcell()+2] == 0 && grid[blockvector[block_no-2].gridcell()+1] == 0) {
+											movement=2;
+										} else {
+											movement=4;
+										}
+									}
+									// Centre.
+									if (blockvector[block_no-3].gridcell()%10 > 2 && blockvector[block_no-3].gridcell()%10 < 7) {
+										if (grid[blockvector[block_no-2].gridcell()-1] == 0 && grid[blockvector[block_no-2].gridcell()+1] == 0 && grid[blockvector[block_no-2].gridcell()+2] == 0) {
+											movement=1;
+										} else if (grid[blockvector[block_no-2].gridcell()+1] == 0 && grid[blockvector[block_no-2].gridcell()+2] == 0 && grid[blockvector[block_no-2].gridcell()+3] == 0) {
+											movement=0;
+										} else if (grid[blockvector[block_no-2].gridcell()-2] == 0 && grid[blockvector[block_no-2].gridcell()-1] == 0 && grid[blockvector[block_no-2].gridcell()+1] == 0) {
+											movement=2;
+										} else if (grid[blockvector[block_no-2].gridcell()-3] == 0 && grid[blockvector[block_no-2].gridcell()-2] == 0 && grid[blockvector[block_no-2].gridcell()-1] == 0) {
+											movement=3;
+										} else {
+											movement=4;
+										}
+									}
+									// 2 from right.
+									if (blockvector[block_no-3].gridcell()%10 == 7) {
+										if (grid[blockvector[block_no-2].gridcell()-1] == 0 && grid[blockvector[block_no-2].gridcell()+1] == 0 && grid[blockvector[block_no-2].gridcell()+2] == 0) {
+											movement=1;
+										} else if (grid[blockvector[block_no-2].gridcell()-2] == 0 && grid[blockvector[block_no-2].gridcell()-1] == 0 && grid[blockvector[block_no-2].gridcell()+1] == 0) {
+											movement=2;
+										} else if (grid[blockvector[block_no-2].gridcell()-3] == 0 && grid[blockvector[block_no-2].gridcell()-2] == 0 && grid[blockvector[block_no-2].gridcell()-1] == 0) {
+											movement=3;
+										} else {
+											movement=4;
+										}
+									}
+									// 1 from right.
+									if (blockvector[block_no-3].gridcell()%10 == 8) {
+										if (grid[blockvector[block_no-2].gridcell()-2] == 0 && grid[blockvector[block_no-2].gridcell()-1] == 0 && grid[blockvector[block_no-2].gridcell()+1] == 0) {
+											movement=2;
+										} else if (grid[blockvector[block_no-2].gridcell()-3] == 0 && grid[blockvector[block_no-2].gridcell()-2] == 0 && grid[blockvector[block_no-2].gridcell()-1] == 0) {
+											movement=3;
+										} else {
+											movement=4;
+										}
+									}
+									// On far right.
+									if (blockvector[block_no-3].gridcell()%10 == 9) {
+										if (grid[blockvector[block_no-2].gridcell()-3] == 0 && grid[blockvector[block_no-2].gridcell()-2] == 0 && grid[blockvector[block_no-2].gridcell()-1] == 0) {
+											movement=3;
+										} else {
+											movement=4;
+										}
+									}
+									switch(movement) {
+										case 0:
+											blockvector[block_no-3].move(0,20);
+											blockvector[block_no-2].move(20,0);
+											blockvector[block_no-1].move(40,-20);
+											blockvector[block_no].move(60,-40);
+											break;
+										case 1:
+											
+											blockvector[block_no-3].move(-20,20);
+											blockvector[block_no-1].move(20,-20);
+											blockvector[block_no].move(40,-40);
+											break;
+										case 2:
+											blockvector[block_no-3].move(-40,20);
+											blockvector[block_no-2].move(-20,0);
+											blockvector[block_no-1].move(0,-20);
+											blockvector[block_no].move(20,-40);
+											break;
+										case 3:
+											blockvector[block_no-3].move(-60,20);
+											blockvector[block_no-2].move(-40,0);
+											blockvector[block_no-1].move(-20,-20);
+											blockvector[block_no].move(0,-40);
+											break;
+										default:
+											break;
+									}
+									break;
+							}
+							break;
+						case 2: // T shaped piece.
+							// Jutting block points down.
+							if (blockvector[block_no].gridcell() == blockvector[block_no-2].gridcell()+10) {
+								pos=0;
+							// Jutting block points left.
+							} else if (blockvector[block_no].gridcell() == blockvector[block_no-2].gridcell()-1) {
+								pos=1;
+							// Jutting block points up.
+							} else if (blockvector[block_no].gridcell() == blockvector[block_no-2].gridcell()-10) {
+								pos=2;
+							// Jutting block points right.
+							} else {
+								pos=3;
+							}
+							switch (pos) {
+								case 0:
+									// If not on bottom.
+									if (blockvector[block_no].gridcell() < 190) {
+										if (grid[blockvector[block_no].gridcell()+1] == 0 && grid[blockvector[block_no].gridcell()+11] == 0) {
+											movement=1;
+										} else {
+											movement=3;
+										}
+									} else { // If on bottom.
+										if (grid[blockvector[block_no].gridcell()-19] == 0 && grid[blockvector[block_no].gridcell()+1] == 0) {
+											movement=2;
+										} else {
+											movement=3;
+										}
+									}
+									switch(movement) {
+										case 1:
+											blockvector[block_no-3].move(40,0);
+											blockvector[block_no-2].move(20,20);
+											blockvector[block_no-1].move(0,40);
+											break;
+										case 2:
+											blockvector[block_no-3].move(40,-20);
+											blockvector[block_no-2].move(20,0);
+											blockvector[block_no-1].move(0,20);
+											blockvector[block_no].move(0,-20);
+											break;
+										default:
+											break;
+									}
+									break;
+								case 1:
+									// If not on left.
+									if (blockvector[block_no].gridcell()%10 != 0) {
+										if (grid[blockvector[block_no].gridcell()+9] == 0 && grid[blockvector[block_no].gridcell()+10] == 0) {
+											movement=1;
+										} else {
+											movement=3;
+										}
+									} else { // If on left.
+										if (grid[blockvector[block_no].gridcell()+10] == 0 && grid[blockvector[block_no].gridcell()+12] == 0) {
+											movement=2;
+										} else {
+											movement=3;
+										}
+									}
+									switch(movement) {
+										case 1:
+											blockvector[block_no-3].move(0,40);
+											blockvector[block_no-2].move(-20,20);
+											blockvector[block_no-1].move(-40,0);
+											break;
+										case 2:
+											blockvector[block_no-3].move(20,40);
+											blockvector[block_no-2].move(0,20);
+											blockvector[block_no-1].move(-20,0);
+											blockvector[block_no].move(20,0);
+											break;
+										default:
+											break;
+									}
+									break;
+								case 2:
+									// If not at top.
+									if (blockvector[block_no].gridcell() > 9) {
+										if (grid[blockvector[block_no].gridcell()-11] == 0 && grid[blockvector[block_no].gridcell()+9] == 0) {
+											movement=1;
+										} else {
+											movement=3;
+										}
+									} else { // If at top.
+										if (grid[blockvector[block_no].gridcell()-1] == 0 && grid[blockvector[block_no].gridcell()+19] == 0) {
+											movement=2;
+										} else {
+											movement=3;
+										}
+									}
+									switch(movement) {
+										case 1:
+											blockvector[block_no-3].move(-40,0);
+											blockvector[block_no-2].move(-20,-20);
+											blockvector[block_no-1].move(0,-40);
+											break;
+										case 2:
+											blockvector[block_no-3].move(-40,20);
+											blockvector[block_no-2].move(-20,0);
+											blockvector[block_no-1].move(0,-20);
+											blockvector[block_no].move(0,20);
+											break;
+										default:
+											break;
+									}
+									break;
+								default:
+									// If not on right.
+									if (blockvector[block_no].gridcell()%10 != 9) {
+										if (grid[blockvector[block_no].gridcell()-10] == 0 && grid[blockvector[block_no].gridcell()-9] == 0) {
+											movement=1;
+										} else {
+											movement=3;
+										}
+									} else { // If on right.
+										if (grid[blockvector[block_no].gridcell()-10] == 0 && grid[blockvector[block_no].gridcell()-12] == 0) {
+											movement=2;
+										} else {
+											movement=3;
+										}
+									}
+									switch(movement) {
+										case 1:
+											blockvector[block_no-3].move(0,-40);
+											blockvector[block_no-2].move(20,-20);
+											blockvector[block_no-1].move(40,0);
+											break;
+										case 2:
+											blockvector[block_no-3].move(-20,-40);
+											blockvector[block_no-2].move(0,-20);
+											blockvector[block_no-1].move(20,-0);
+											blockvector[block_no].move(-20,0);
+											break;
+										default:
+											break;
+									}
+									break;
+							}
+							break;
+						case 3: // s shaped piece
+							// Positioned like s.
+							if (blockvector[block_no].gridcell() == blockvector[block_no-1].gridcell()+1) {
+								pos=0;
+							} else {
+								pos=1;
+							}
+							switch (pos) {
+								case 0:
+									// If not on bottom.
+									if (blockvector[block_no].gridcell() < 190) {
+										if (grid[blockvector[block_no].gridcell()+1] == 0 && grid[blockvector[block_no].gridcell()+11] == 0) {
+											movement=1;
+										} else {
+											movement=3;
+										}
+									} else { // If on bottom.
+										if (grid[blockvector[block_no].gridcell()-20] == 0 && grid[blockvector[block_no].gridcell()+1] == 0) {
+											movement=2;
+										} else {
+											movement=3;
+										}
+									}
+									switch(movement) {
+										case 1:
+											blockvector[block_no-3].move(20,20);
+											blockvector[block_no-2].move(0,40);
+											blockvector[block_no-1].move(20,-20);
+											break;
+										case 2:
+											blockvector[block_no-3].move(20,0);
+											blockvector[block_no-2].move(0,20);
+											blockvector[block_no-1].move(20,-40);
+											blockvector[block_no].move(0,-20);
+											break;
+										default:
+											break;
+									}
+									break;
+								case 1:
+									// If not on left.
+									if (blockvector[block_no].gridcell()%10 != 0) {
+										if (grid[blockvector[block_no].gridcell()-1] == 0 && grid[blockvector[block_no].gridcell()-9] == 0) {
+											movement=1;
+										} else {
+											movement=3;
+										}
+									} else { // If on left.
+										if (grid[blockvector[block_no].gridcell()-9] == 0 && grid[blockvector[block_no].gridcell()-8] == 0) {
+											movement=2;
+										} else {
+											movement=3;
+										}
+									}
+									switch(movement) {
+										case 1:
+											blockvector[block_no-3].move(-20,-20);
+											blockvector[block_no-2].move(0,-40);
+											blockvector[block_no-1].move(-20,20);
+											break;
+										case 2:
+											blockvector[block_no-3].move(0,-20);
+											blockvector[block_no-2].move(20,-40);
+											blockvector[block_no-1].move(0,20);
+											blockvector[block_no].move(20,0);
+											break;
+										default:
+											break;
+									}
+									break;
+								}
+							break;
+						case 4: // z shaped piece
+							// Positioned like z.
+							if (blockvector[block_no].gridcell() == blockvector[block_no-1].gridcell()-1) {
+								pos=0;
+							} else {
+								pos=1;
+							}
+							switch (pos) {
+								case 0:
+									// If not on bottom.
+									if (blockvector[block_no].gridcell() < 190) {
+										if (grid[blockvector[block_no].gridcell()+10] == 0 && grid[blockvector[block_no].gridcell()-9] == 0) {
+											movement=1;
+										} else {
+											movement=3;
+										}
+									} else { // If on bottom.
+										if (grid[blockvector[block_no].gridcell()-19] == 0 && grid[blockvector[block_no].gridcell()-9] == 0) {
+											movement=2;
+										} else {
+											movement=3;
+										}
+									}
+									switch(movement) {
+										case 1:
+											blockvector[block_no-3].move(40,0);
+											blockvector[block_no-2].move(20,20);
+											blockvector[block_no-1].move(-20,20);
+											break;
+										case 2:
+											blockvector[block_no-3].move(40,-20);
+											blockvector[block_no-2].move(20,0);
+											blockvector[block_no-1].move(-20,0);
+											blockvector[block_no].move(0,-20);
+											break;
+										default:
+											break;
+									}
+									break;
+								case 1:
+									// If not on left.
+									if (blockvector[block_no].gridcell()%10 != 0) {
+										if (grid[blockvector[block_no].gridcell()-11] == 0 && grid[blockvector[block_no].gridcell()-10] == 0) {
+											movement=1;
+										} else {
+											movement=3;
+										}
+									} else { // If on left.
+										if (grid[blockvector[block_no].gridcell()-10] == 0 && grid[blockvector[block_no].gridcell()+2] == 0) {
+											movement=2;
+										} else {
+											movement=3;
+										}
+									}
+									switch(movement) {
+										case 1:
+											blockvector[block_no-3].move(-40,0);
+											blockvector[block_no-2].move(-20,-20);
+											blockvector[block_no-1].move(20,-20);
+											break;
+										case 2:
+											blockvector[block_no-3].move(-20,0);
+											blockvector[block_no-2].move(0,-20);
+											blockvector[block_no-1].move(40,-20);
+											blockvector[block_no].move(20,0);
+											break;
+										default:
+											break;
+									}
+									break;
+								}
+							break;
+						case 5: // L shaped piece
+							// Corner at top left.
+							if (blockvector[block_no-2].gridcell() == blockvector[block_no-3].gridcell()+1) {
+								pos=0;
+							// Corner at top right.
+							} else if (blockvector[block_no-2].gridcell() == blockvector[block_no-3].gridcell()+10) {
+								pos=1;
+							// Corner at bottom right.
+							} else if (blockvector[block_no-2].gridcell() == blockvector[block_no-3].gridcell()-1) {
+								pos=2;
+							// Corner at bottom left.
+							} else {
+								pos=3;
+							}
+							switch (pos) {
+								case 0:
+									// If not on bottom.
+									if (blockvector[block_no].gridcell() < 190) {
+										if (grid[blockvector[block_no].gridcell()+2] == 0 && grid[blockvector[block_no].gridcell()+12] == 0) {
+											movement=1;
+										} else {
+											movement=3;
+										}
+									} else { // If on bottom.
+										if (grid[blockvector[block_no].gridcell()-19] == 0 && grid[blockvector[block_no].gridcell()-18] == 0 && grid[blockvector[block_no].gridcell()+2] == 0) {
+											movement=2;
+										} else {
+											movement=3;
+										}
+									}
+									switch(movement) {
+										case 1:
+											blockvector[block_no-3].move(40,0);
+											blockvector[block_no-2].move(20,20);
+											blockvector[block_no-1].move(0,40);
+											blockvector[block_no].move(20,-20);
+											break;
+										case 2:
+											blockvector[block_no-3].move(40,-20);
+											blockvector[block_no-2].move(20,0);
+											blockvector[block_no-1].move(0,20);
+											blockvector[block_no].move(20,-40);
+											break;
+										default:
+											break;
+									}
+									break;
+								case 1:
+									// If not on left.
+									if (blockvector[block_no].gridcell()%10 != 0) {
+										if (grid[blockvector[block_no].gridcell()+19] == 0 && grid[blockvector[block_no].gridcell()+20] == 0) {
+											movement=1;
+										} else {
+											movement=3;
+										}
+									} else { // If on left.
+										if (grid[blockvector[block_no].gridcell()+10] == 0 && grid[blockvector[block_no].gridcell()+12] == 0 && grid[blockvector[block_no].gridcell()+2] == 0) {
+											movement=2;
+										} else {
+											movement=3;
+										}
+									}
+									switch(movement) {
+										case 1:
+											blockvector[block_no-3].move(0,40);
+											blockvector[block_no-2].move(-20,20);
+											blockvector[block_no-1].move(-40,0);
+											blockvector[block_no].move(20,20);
+											break;
+										case 2:
+											blockvector[block_no-3].move(20,20);
+											
+											blockvector[block_no-1].move(-20,-20);
+											blockvector[block_no].move(40,0);
+											break;
+										default:
+											break;
+									}
+									break;
+								case 2:
+									// If not at top.
+									if (blockvector[block_no].gridcell() > 9) {
+										if (grid[blockvector[block_no].gridcell()-12] == 0 && grid[blockvector[block_no].gridcell()-2] == 0) {
+											movement=1;
+										} else {
+											movement=3;
+										}
+									} else { // If at top.
+										if (grid[blockvector[block_no].gridcell()-2] == 0 && grid[blockvector[block_no].gridcell()+18] == 0 && grid[blockvector[block_no].gridcell()+19] == 0) {
+											movement=2;
+										} else {
+											movement=3;
+										}
+									}
+									switch(movement) {
+										case 1:
+											blockvector[block_no-3].move(-40,0);
+											blockvector[block_no-2].move(-20,-20);
+											blockvector[block_no-1].move(0,-40);
+											blockvector[block_no].move(-20,20);
+											break;
+										case 2:
+											blockvector[block_no-3].move(-40,20);
+											blockvector[block_no-2].move(-20,0);
+											blockvector[block_no-1].move(0,-20);
+											blockvector[block_no].move(-20,40);
+											break;
+										default:
+											break;
+									}
+									break;
+								default:
+									// If not on right.
+									if (blockvector[block_no].gridcell()%10 != 9) {
+										if (grid[blockvector[block_no].gridcell()-20] == 0 && grid[blockvector[block_no].gridcell()-19] == 0) {
+											movement=1;
+										} else {
+											movement=3;
+										}
+									} else { // If on right.
+										if (grid[blockvector[block_no].gridcell()-20] == 0 && grid[blockvector[block_no].gridcell()-22] == 0 && grid[blockvector[block_no].gridcell()-12] == 0) {
+											movement=2;
+										} else {
+											movement=3;
+										}
+									}
+									switch(movement) {
+										case 1:
+											blockvector[block_no-3].move(0,-40);
+											blockvector[block_no-2].move(20,-20);
+											blockvector[block_no-1].move(40,0);
+											blockvector[block_no].move(-20,-20);
+											break;
+										case 2:
+											blockvector[block_no-3].move(-20,-40);
+											blockvector[block_no-2].move(0,-20);
+											blockvector[block_no-1].move(20,-0);
+											blockvector[block_no].move(-40,-20);
+											break;
+										default:
+											break;
+									}
+									break;
+							}
+							break;
+						default: // Backwards L shaped piece.
+							// Corner at top right.
+							if (blockvector[block_no-2].gridcell() == blockvector[block_no-3].gridcell()+1) {
+								pos=0;
+							// Corner at bottom right.
+							} else if (blockvector[block_no-2].gridcell() == blockvector[block_no-3].gridcell()+10) {
+								pos=1;
+							// Corner at bottom left.
+							} else if (blockvector[block_no-2].gridcell() == blockvector[block_no-3].gridcell()-1) {
+								pos=2;
+							// Corner at top left.
+							} else {
+								pos=3;
+							}
+							switch (pos) {
+								case 0:
+									// If not on bottom.
+									if (blockvector[block_no].gridcell() < 190) {
+										if (grid[blockvector[block_no].gridcell()+9] == 0 && grid[blockvector[block_no].gridcell()+10] == 0) {
+											movement=1;
+										} else {
+											movement=3;
+										}
+									} else { // If on bottom.
+										if (grid[blockvector[block_no].gridcell()-1] == 0 && grid[blockvector[block_no].gridcell()-20] == 0) {
+											movement=2;
+										} else {
+											movement=3;
+										}
+									}
+									switch(movement) {
+										case 1:
+											blockvector[block_no-3].move(40,0);
+											blockvector[block_no-2].move(20,20);
+											blockvector[block_no-1].move(0,40);
+											blockvector[block_no].move(-20,20);
+											break;
+										case 2:
+											blockvector[block_no-3].move(40,-20);
+											blockvector[block_no-2].move(20,0);
+											blockvector[block_no-1].move(0,20);
+											blockvector[block_no].move(-20,0);
+											break;
+										default:
+											break;
+									}
+									break;
+								case 1:
+									// If not on left.
+									if (blockvector[block_no].gridcell()%10 != 0) {
+										if (grid[blockvector[block_no].gridcell()-11] == 0 && grid[blockvector[block_no].gridcell()-1] == 0) {
+											movement=1;
+										} else {
+											movement=3;
+										}
+									} else { // If on left.
+										if (grid[blockvector[block_no].gridcell()-20] == 0 && grid[blockvector[block_no].gridcell()-10] == 0  && grid[blockvector[block_no].gridcell()-8] == 0) {
+											movement=2;
+										} else {
+											movement=3;
+										}
+									}
+									switch(movement) {
+										case 1:
+											blockvector[block_no-3].move(0,40);
+											blockvector[block_no-2].move(-20,20);
+											blockvector[block_no-1].move(-40,0);
+											blockvector[block_no].move(-20,-20);
+											break;
+										case 2:
+											blockvector[block_no-3].move(20,20);
+											
+											blockvector[block_no-1].move(-20,-20);
+											blockvector[block_no].move(0,-40);
+											break;
+										default:
+											break;
+									}
+									break;
+								case 2:
+									// If not at top.
+									if (blockvector[block_no].gridcell() > 9) {
+										if (grid[blockvector[block_no].gridcell()-10] == 0 && grid[blockvector[block_no].gridcell()-9] == 0) {
+											movement=1;
+										} else {
+											movement=3;
+										}
+									} else { // If at top.
+										if (grid[blockvector[block_no].gridcell()+1] == 0 && grid[blockvector[block_no].gridcell()+20] == 0) {
+											movement=2;
+										} else {
+											movement=3;
+										}
+									}
+									switch(movement) {
+										case 1:
+											blockvector[block_no-3].move(-40,0);
+											blockvector[block_no-2].move(-20,-20);
+											blockvector[block_no-1].move(0,-40);
+											blockvector[block_no].move(20,-20);
+											break;
+										case 2:
+											blockvector[block_no-3].move(-40,20);
+											blockvector[block_no-2].move(-20,0);
+											blockvector[block_no-1].move(0,-20);
+											blockvector[block_no].move(20,0);
+											break;
+										default:
+											break;
+									}
+									break;
+								default:
+									// If not on right.
+									if (blockvector[block_no].gridcell()%10 != 9) {
+										if (grid[blockvector[block_no].gridcell()+1] == 0 && grid[blockvector[block_no].gridcell()+11] == 0) {
+											movement=1;
+										} else {
+											movement=3;
+										}
+									} else { // If on right.
+										if (grid[blockvector[block_no].gridcell()-2] == 0 && grid[blockvector[block_no].gridcell()+10] == 0 && grid[blockvector[block_no].gridcell()-12] == 0) {
+											movement=2;
+										} else {
+											movement=3;
+										}
+									}
+									switch(movement) {
+										case 1:
+											blockvector[block_no-3].move(0,-40);
+											blockvector[block_no-2].move(20,-20);
+											blockvector[block_no-1].move(40,0);
+											blockvector[block_no].move(20,20);
+											break;
+										case 2:
+											blockvector[block_no-3].move(-20,-40);
+											blockvector[block_no-2].move(0,-20);
+											blockvector[block_no-1].move(20,0);
+											blockvector[block_no].move(0,20);
+											break;
+										default:
+											break;
+									}
+									break;
+							}
+							break;
+					}
+				}
+				// Drop block.
+				if (event.key.code == sf::Keyboard::T) {
+					// If no block at bottom.
+					if (blockvector[block_no].gridcell() < 190 && blockvector[block_no-1].gridcell() < 190 && blockvector[block_no-2].gridcell() < 190 && blockvector[block_no-3].gridcell() < 190) {
+						// If nothing in cells below, move it.
+						if (grid[(blockvector)[block_no].gridcell()+10] == 0 && grid[(blockvector)[block_no-1].gridcell()+10] == 0 && grid[(blockvector)[block_no-2].gridcell()+10] == 0 && grid[(blockvector)[block_no-3].gridcell()+10] == 0) {
+							blockvector[block_no].move(0,20); blockvector[block_no-1].move(0,20); blockvector[block_no-2].move(0,20); blockvector[block_no-3].move(0,20);
+						}
+					}
+				}
+				// Start game / replay.
+				if (event.key.code == sf::Keyboard::Space) {
+					if (gameover == -1) {
+						gameover = 0;
+						thread.launch();
+					}
+					if (gameover == 1) {
+						block_no = 0;
+						score = 0;
+						scorestring = to_string(score);
+						scoretext.setString(scorestring);
+						for (i=0; i<200; i++) {
+							grid[i]=0;
+						}
+						gameover = 0;
+						(blockvector)[0].restingplace = 201;
+						(blockvector)[0].type = 0;
+						thread.launch();
+					}
+				}
+			}
+        }
+        window.clear();
+		if (gameover == -1) {
+			window.draw(introtext);
+		} else {
+			window.draw(scoretext);
+			window.draw(stuff);
+			// Draw all blocks.
+			for (i=0; i<block_no+1; i++) {
+				{window.draw(blockvector[i]);}
+			}
+			if (gameover == 1) {
+				window.draw(gameoverrect);
+				window.draw(gameovertext);
+			}
+		}
+        window.display();
+    }
+    return 0;
+}
